@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { AlertLog } from '../types';
 
@@ -62,7 +61,8 @@ const LogPanel: React.FC<LogPanelProps> = ({ logs, strategies }) => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredLogs.slice().reverse().map((log) => (
+              {/* Removed .reverse() because App.tsx already puts newest at index 0 */}
+              {filteredLogs.map((log) => (
                 <tr key={log.id} className="hover:bg-slate-50 transition-colors text-slate-700">
                   <td className="p-3 text-slate-500 truncate">{new Date(log.timestamp).toLocaleTimeString()}</td>
                   <td className="p-3 text-slate-800 truncate">
@@ -71,7 +71,7 @@ const LogPanel: React.FC<LogPanelProps> = ({ logs, strategies }) => {
                   </td>
                   <td className="p-3">
                     <span className={`px-2 py-1 rounded text-[10px] font-bold ${
-                      log.type.includes('Strategy') ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'
+                      log.type.includes('Manual') ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600'
                     }`}>
                       {log.type}
                     </span>
