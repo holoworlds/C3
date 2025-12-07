@@ -1,0 +1,5 @@
+{
+  "name": "CryptoQuant Monitor",
+  "description": "Real-time crypto EMA crossover strategy monitor with webhook alerts using Binance data.",
+  "requestFramePermissions": []
+}
