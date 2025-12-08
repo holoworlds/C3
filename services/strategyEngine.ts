@@ -21,8 +21,8 @@ export const evaluateStrategy = (
   let nextPos = { ...currentPosition };
   let nextStats = { ...tradeStats };
 
-  // 1. Basic Validation
-  if (candles.length < 2 || !config.isActive) {
+  // 1. Basic Validation - Ensure enough data for indicators (EMA99 needs ~100+ candles to settle, but strict check here)
+  if (candles.length < 50 || !config.isActive) {
     return { newPositionState: nextPos, newTradeStats: nextStats, actions };
   }
 
@@ -168,8 +168,14 @@ export const evaluateStrategy = (
 
       // 2. Fixed TP/SL (Only if Trailing and Multi are OFF, OR as per instruction)
       if (config.useFixedTPSL && !config.useTrailingStop && !config.useMultiTPSL && !finalCloseReason) {
-          if (profitPct >= config.takeProfitPct) finalCloseReason = '固定止盈触发';
-          if (profitPct <= -config.stopLossPct) finalCloseReason = '固定止损触发';
+          // Use High/Low for more accurate hit detection within the candle
+          const longTPHit = isLong && last.high >= entryPrice * (1 + config.takeProfitPct/100);
+          const longSLHit = isLong && last.low <= entryPrice * (1 - config.stopLossPct/100);
+          const shortTPHit = !isLong && last.low <= entryPrice * (1 - config.takeProfitPct/100);
+          const shortSLHit = !isLong && last.high >= entryPrice * (1 + config.stopLossPct/100);
+
+          if (longTPHit || shortTPHit) finalCloseReason = '固定止盈触发';
+          else if (longSLHit || shortSLHit) finalCloseReason = '固定止损触发';
       }
 
       // 3. Trailing Stop
@@ -178,14 +184,14 @@ export const evaluateStrategy = (
             nextPos.highestPrice = Math.max(nextPos.highestPrice, last.high);
             const stopPrice = nextPos.highestPrice * (1 - config.trailDistance / 100);
             const activationPrice = entryPrice * (1 + config.trailActivation / 100);
-            if (nextPos.highestPrice >= activationPrice && last.close <= stopPrice) {
+            if (nextPos.highestPrice >= activationPrice && last.low <= stopPrice) {
                finalCloseReason = '追踪止盈触发';
             }
          } else {
             nextPos.lowestPrice = Math.min(nextPos.lowestPrice, last.low);
             const stopPrice = nextPos.lowestPrice * (1 + config.trailDistance / 100);
             const activationPrice = entryPrice * (1 - config.trailActivation / 100);
-            if (nextPos.lowestPrice <= activationPrice && last.close >= stopPrice) {
+            if (nextPos.lowestPrice <= activationPrice && last.high >= stopPrice) {
               finalCloseReason = '追踪止盈触发';
             }
          }
@@ -262,9 +268,6 @@ export const evaluateStrategy = (
              const actionStr = isLong ? 'sell' : 'buy_to_cover';
              
              actions.push(createPayload(actionStr, 'flat', finalCloseReason, tradeValue, qtyToClose));
-          } else {
-             // Even if quantity is 0, we might want to send a log that the strategy state is resetting to FLAT,
-             // but technically no trade occurs. We won't send webhook if quantity is 0.
           }
           
           nextPos = {
