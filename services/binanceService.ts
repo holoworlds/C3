@@ -20,12 +20,10 @@ export const fetchHistoricalCandles = async (
         url += `&endTime=${endTime}`;
     }
     
-    // In Node.js 18+, fetch is global. In older versions, this might need a polyfill.
     const response = await fetch(url);
     const data = await response.json();
 
     if (!Array.isArray(data)) {
-        // Log the stringified error object to see detail (e.g. invalid symbol code)
         console.error("Invalid response from Binance (Expected Array):", JSON.stringify(data));
         return [];
     }

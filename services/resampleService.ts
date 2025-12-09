@@ -86,7 +86,7 @@ export const resampleCandles = (baseCandles: Candle[], targetInterval: IntervalT
     const baseEndTime = base.time + baseMs;
     const targetEndTime = targetStartTime + targetMs;
     
-    // Allow for small time drift tolerance if needed, but usually exact match works for integer intervals
+    // Allow for small time drift tolerance if needed
     if (base.isClosed && baseEndTime >= targetEndTime) {
         current.isClosed = true;
     }

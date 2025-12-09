@@ -9,8 +9,8 @@ import { StrategyConfig, StrategyRuntime } from '../types';
 import { FileStore } from './FileStore';
 
 const app = express();
-app.use(cors() as express.RequestHandler);
-app.use(express.json());
+app.use(cors() as any);
+app.use(express.json() as any);
 
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -28,9 +28,17 @@ let logs: any[] = [];
 
 // --- Persistence Helpers ---
 function saveSystemState() {
-    const strategySnapshots = Object.values(strategies).map(s => s.getSnapshot());
-    FileStore.save('strategies', strategySnapshots);
-    FileStore.save('logs', logs);
+    try {
+        const validStrategies = Object.values(strategies).filter(s => s && typeof s.getSnapshot === 'function');
+        const strategySnapshots = validStrategies.map(s => s.getSnapshot());
+        
+        if (strategySnapshots.length > 0) {
+            FileStore.save('strategies', strategySnapshots);
+        }
+        FileStore.save('logs', logs);
+    } catch (e) {
+        console.error('[System] Error saving state:', e);
+    }
 }
 
 // --- Initialization with Recovery ---
@@ -50,26 +58,29 @@ async function initializeSystem() {
         console.log(`[System] Restoring ${savedSnapshots.length} strategies from disk...`);
         
         for (const snapshot of savedSnapshots) {
-            // Re-create Runner
-            const runner = new StrategyRunner(
-                snapshot.config,
-                (id, runtime) => {
-                    broadcastUpdate(id, runtime);
-                    // Debounced save could be better, but for now simple check or periodic
-                },
-                (log) => {
-                    addLog(log);
-                    saveSystemState(); // Save on new log
+            try {
+                // Re-create Runner
+                const runner = new StrategyRunner(
+                    snapshot.config,
+                    (id, runtime) => {
+                        broadcastUpdate(id, runtime);
+                    },
+                    (log) => {
+                        addLog(log);
+                        saveSystemState(); // Save on new log
+                    }
+                );
+
+                // Restore Internal State
+                if (snapshot.positionState && snapshot.tradeStats) {
+                    runner.restoreState(snapshot.positionState, snapshot.tradeStats);
                 }
-            );
 
-            // Restore Internal State
-            if (snapshot.positionState && snapshot.tradeStats) {
-                runner.restoreState(snapshot.positionState, snapshot.tradeStats);
+                strategies[snapshot.config.id] = runner;
+                await runner.start();
+            } catch (err) {
+                console.error(`[System] Failed to restore strategy ${snapshot?.config?.id}:`, err);
             }
-
-            strategies[snapshot.config.id] = runner;
-            await runner.start();
         }
     } else {
         console.log('[System] No saved state found. Starting default strategy.');
@@ -96,7 +107,9 @@ function broadcastUpdate(id: string, runtime: StrategyRuntime) {
 function broadcastFullState(socketId?: string) {
     const fullState: Record<string, StrategyRuntime> = {};
     Object.keys(strategies).forEach(id => {
-        fullState[id] = strategies[id].runtime;
+        if (strategies[id]) {
+            fullState[id] = strategies[id].runtime;
+        }
     });
     
     if (socketId) {

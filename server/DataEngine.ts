@@ -64,15 +64,18 @@ class StreamHandler {
             
             // 2. Fetch Incremental History
             const lastTime = localData[localData.length - 1].time;
-            // Start from the next candle time to avoid duplicates (roughly)
-            // Or just use lastTime, Binance handles it.
-            const newData = await fetchHistoricalCandles(this.symbol, this.baseInterval, lastTime + 1);
-            
-            if (newData.length > 0) {
-                 console.log(`[DataEngine] Fetched ${newData.length} new candles from API`);
-                 // Merge Logic: Remove duplicates if any
-                 // Simple merge since we requested startTime > lastTime
-                 this.baseCandles = [...this.baseCandles, ...newData];
+            try {
+                // Start from the next candle time
+                const newData = await fetchHistoricalCandles(this.symbol, this.baseInterval, lastTime + 1);
+                
+                if (newData.length > 0) {
+                    console.log(`[DataEngine] Fetched ${newData.length} new candles from API`);
+                    // Merge Logic: Remove duplicates if any overlapping timestamp logic wasn't perfect
+                    // Since we passed lastTime + 1, it should be fine.
+                    this.baseCandles = [...this.baseCandles, ...newData];
+                }
+            } catch (e) {
+                console.error("[DataEngine] Failed incremental fetch", e);
             }
         } else {
             // 2. Fetch Full History
@@ -80,7 +83,9 @@ class StreamHandler {
             this.baseCandles = history;
         }
 
-        // Limit buffer size
+        // Limit buffer size (keep enough for 1D resampling if needed)
+        // 1500 1m candles is 1 day. If we need more, we might need a larger buffer or different logic.
+        // For now, 2000 is reasonable.
         if (this.baseCandles.length > 2000) {
             this.baseCandles = this.baseCandles.slice(-2000);
         }
@@ -111,7 +116,8 @@ class StreamHandler {
         }
         this.subscribers.get(targetInterval)!.push({ id: subId, targetInterval, callback });
 
-        // Immediately send current data to the new subscriber
+        // IMPORTANT: Immediately send current data to the new subscriber
+        // This fixes the issue of charts being empty upon initial load/switch
         const currentData = this.getOrCalculateDerivedData(targetInterval);
         callback(currentData);
     }
@@ -139,8 +145,11 @@ class StreamHandler {
 
         console.log(`[DataEngine] Stream ${this.symbol} has no subscribers. Destroying in ${this.KEEP_ALIVE_MS / 1000}s...`);
         this.destroyTimeout = setTimeout(() => {
-            this.destroy();
-            callback(); // Notify parent to remove from map
+            // Double check before destroying
+            if (!this.hasSubscribers()) {
+                this.destroy();
+                callback(); // Notify parent to remove from map
+            }
         }, this.KEEP_ALIVE_MS);
     }
 
@@ -212,12 +221,12 @@ class StreamHandler {
             this.saveToDisk();
         }
 
-        // Keep buffer size manageable but large enough for resampling
+        // Keep buffer size manageable
         if (this.baseCandles.length > 2000) {
             this.baseCandles = this.baseCandles.slice(-2000);
         }
 
-        // 2. Invalidate Derived Buffers (Simpler than incremental update for now)
+        // 2. Invalidate Derived Buffers
         this.derivedBuffers.clear();
 
         // 3. Notify All Subscribers
@@ -231,7 +240,7 @@ class StreamHandler {
         // If Base == Target (Native), return raw slice
         if (targetInterval === this.baseInterval) {
             // Return copy to prevent mutation by strategies
-            return this.baseCandles.slice(-550); // Return relevant window
+            return this.baseCandles.slice(-550); 
         }
 
         // Check Cache
