@@ -37,6 +37,9 @@ const App: React.FC = () => {
   const [logs, setLogs] = useState<AlertLog[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const socketRef = useRef<Socket | null>(null);
+  
+  // Buffer for throttling updates
+  const pendingUpdatesRef = useRef<Record<string, StrategyRuntime>>({});
 
   // --- Socket Connection ---
   useEffect(() => {
@@ -58,18 +61,18 @@ const App: React.FC = () => {
     socket.on('full_state', (data: Record<string, StrategyRuntime>) => {
         setStrategies(data);
         // If the active strategy is no longer in the list (e.g. deleted), switch to first available
-        if (!data[activeStrategyId]) {
-            const keys = Object.keys(data);
-            if (keys.length > 0) setActiveStrategyId(keys[0]);
-        }
+        setActiveStrategyId(prevId => {
+             if (!data[prevId]) {
+                const keys = Object.keys(data);
+                if (keys.length > 0) return keys[0];
+             }
+             return prevId;
+        });
     });
 
-    // Receive Incremental Updates (Tick)
+    // Receive Incremental Updates (Tick) - Buffered
     socket.on('state_update', ({ id, runtime }: { id: string, runtime: StrategyRuntime }) => {
-        setStrategies(prev => ({
-            ...prev,
-            [id]: runtime
-        }));
+        pendingUpdatesRef.current[id] = runtime;
     });
 
     // Logs
@@ -81,7 +84,19 @@ const App: React.FC = () => {
         setLogs(prev => [log, ...prev].slice(0, 500));
     });
 
+    // Throttling Interval (250ms) to reduce render frequency
+    const throttleInterval = setInterval(() => {
+        if (Object.keys(pendingUpdatesRef.current).length > 0) {
+            setStrategies(prev => {
+                const updates = pendingUpdatesRef.current;
+                pendingUpdatesRef.current = {}; // Clear buffer
+                return { ...prev, ...updates };
+            });
+        }
+    }, 250);
+
     return () => {
+        clearInterval(throttleInterval);
         socket.disconnect();
     };
   }, []); // Run once

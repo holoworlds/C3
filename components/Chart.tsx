@@ -105,7 +105,8 @@ const Chart: React.FC<ChartProps> = ({ data, logs, symbol, interval }) => {
   const padding = (maxPrice - minPrice) * 0.1;
 
   // Use a key based on symbol/interval to force re-mounting when context changes. 
-  const chartKey = `${symbol}-${interval}-${data.length}`;
+  // REMOVED data.length to prevent flickering on every tick
+  const chartKey = `${symbol}-${interval}`;
 
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -164,6 +165,7 @@ const Chart: React.FC<ChartProps> = ({ data, logs, symbol, interval }) => {
 
         {/* Brush for Zooming */}
         <Brush 
+           key={startIndex} // Update key to force refresh when data shifts (e.g. new candle) to keep view aligned
            dataKey="time" 
            height={30} 
            stroke="#cbd5e1" 
