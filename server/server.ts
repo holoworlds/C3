@@ -9,7 +9,7 @@ import { StrategyConfig, StrategyRuntime } from '../types';
 import { FileStore } from './FileStore';
 
 const app = express();
-app.use(cors());
+app.use(cors() as express.RequestHandler);
 app.use(express.json());
 
 const server = http.createServer(app);
