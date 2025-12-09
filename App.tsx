@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { StrategyConfig, AlertLog, PositionState, TradeStats, StrategyRuntime } from './types';
@@ -7,7 +6,9 @@ import Chart from './components/Chart';
 import ControlPanel from './components/ControlPanel';
 import LogPanel from './components/LogPanel';
 
-const SERVER_URL = 'http://localhost:3001'; // Ensure this matches your server port
+// Use relative path (undefined) to leverage Vite proxy in dev and same-origin in prod.
+// This ensures requests go through the proxy configured in vite.config.ts to localhost:3001
+const SERVER_URL = undefined; 
 
 const INITIAL_POS_STATE: PositionState = {
     direction: 'FLAT', 

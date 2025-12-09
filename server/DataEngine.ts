@@ -1,4 +1,3 @@
-
 import WebSocket from 'ws';
 import { Candle, IntervalType, SymbolType } from "../types";
 import { BINANCE_WS_BASE } from "../constants";
@@ -36,7 +35,7 @@ class StreamHandler {
     private subscribers: Map<string, Subscription[]> = new Map();
 
     // Keep-Alive Mechanism
-    private destroyTimeout: NodeJS.Timeout | null = null;
+    private destroyTimeout: ReturnType<typeof setTimeout> | null = null;
     private readonly KEEP_ALIVE_MS = 60000; // 60s wait before destroying stream
 
     // Persistence
