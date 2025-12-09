@@ -1,4 +1,5 @@
 
+
 import { Candle, StrategyConfig, PositionState, TradeStats, WebhookPayload } from "../types";
 
 // Helper to determine crosses
@@ -133,13 +134,15 @@ export const evaluateStrategy = (
   const canOpen = nextStats.dailyTradeCount < config.maxDailyTrades;
 
   // Helper to generate Payload
-  // NOTE: tradeAmount here should be the USDT Value of the action (Quantity * Price)
+  // Updated to match strict requirement: 
+  // quantity: "{{strategy.order.contracts}}"
   const createPayload = (act: string, pos: string, comment: string, amountVal: number, qty: number): WebhookPayload => ({
     secret: config.secret,
     action: act,
     position: pos,
     symbol: config.symbol,
-    trade_amount: amountVal, 
+    quantity: qty.toString(), // Mapped strictly to required "quantity" field
+    trade_amount: amountVal, // Kept for internal/UI use
     leverage: 5,
     timestamp: now.toISOString(),
     tv_exchange: "BINANCE",
@@ -155,9 +158,6 @@ export const evaluateStrategy = (
       const isLong = nextPos.direction === 'LONG';
       const entryPrice = nextPos.entryPrice;
       const currentPrice = last.close;
-      // const profitPct = isLong 
-      //   ? (currentPrice - entryPrice) / entryPrice * 100 
-      //   : (entryPrice - currentPrice) / entryPrice * 100;
 
       let finalCloseReason = '';
       

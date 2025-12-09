@@ -1,4 +1,5 @@
 
+
 import { Candle, IntervalType, SymbolType } from "../types";
 import { BINANCE_REST_BASE } from "../constants";
 
@@ -50,7 +51,7 @@ export const parseSocketMessage = (msg: any): Candle | null => {
   const k = msg.k;
 
   return {
-    symbol: msg.s, // Binance provides symbol in 's' field of the data payload
+    symbol: msg.s, // Binance provides symbol in 's' field of the data payload. Vital for Zero Tolerance check.
     time: k.t,
     open: parseFloat(k.o),
     high: parseFloat(k.h),

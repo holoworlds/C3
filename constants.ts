@@ -6,11 +6,11 @@ export const AVAILABLE_SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'X
 // Symbols that will be monitored in the background immediately upon server start
 export const PRELOAD_SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'ZECUSDT'];
 
-// Extended list of intervals as requested.
+// Extended list of intervals as requested. Added 8h which was missing.
 export const AVAILABLE_INTERVALS = [
   '1m', '2m', '3m', '5m', '6m', '10m', '15m', '20m', '30m', '31m', '45m', 
-  '1h', '2h', '3h', '4h', '6h', '10h', '12h' 
-  , '1d', '2d', '3d', '1w', '1M'
+  '1h', '2h', '3h', '4h', '6h', '8h', '10h', '12h', 
+  '1d', '2d', '3d', '1w', '1M'
 ] as const; 
 
 // Binance Futures (USDT-M) API Endpoints
@@ -25,7 +25,7 @@ export const DEFAULT_CONFIG: StrategyConfig = {
   symbol: 'BTCUSDT',
   interval: '1m',
   tradeAmount: 0, // Default: 0
-  webhookUrl: '',
+  webhookUrl: 'http://43.167.199.156:80/webhookbinance',
   secret: '',
   
   triggerOnClose: false, // Default to Intraday triggering
@@ -76,14 +76,17 @@ export const DEFAULT_CONFIG: StrategyConfig = {
   macdExitLong: false,
   macdExitShort: false,
 
+  // Trailing Stop
   useTrailingStop: false,
   trailActivation: 1.0,
   trailDistance: 0.5,
 
+  // Fixed TP/SL
   useFixedTPSL: false,
   takeProfitPct: 2.0,
   stopLossPct: 1.0,
 
+  // Multi Level TP/SL
   useMultiTPSL: false,
   tpLevels: [
     { active: true, pct: 2.0, qtyPct: 25 },

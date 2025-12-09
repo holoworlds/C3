@@ -1,4 +1,5 @@
 
+
 import { StrategyConfig, StrategyRuntime, Candle, PositionState, TradeStats, WebhookPayload } from "../types";
 import { enrichCandlesWithIndicators } from "../services/indicatorService";
 import { evaluateStrategy } from "../services/strategyEngine";
@@ -102,7 +103,7 @@ export class StrategyRunner {
     }
 
     private initializeManualPosition(config: StrategyConfig) {
-        // SAFETY FIX: Ensure defaults to prevent crash
+        // SAFETY FIX: Ensure defaults to prevent crash from undefined takeoverDirection
         const direction = config.takeoverDirection || 'FLAT';
         const qty = config.takeoverQuantity || 0;
 
@@ -127,9 +128,10 @@ export class StrategyRunner {
             const payload: WebhookPayload = {
                 secret: config.secret || '',
                 action: direction === 'LONG' ? 'buy' : 'sell',
-                // SAFETY: Use optional chaining to prevent crash if direction is somehow undefined
+                // SAFETY: Use optional chaining to prevent crash
                 position: direction?.toLowerCase() || 'flat',
                 symbol: config.symbol,
+                quantity: qty.toString(),
                 trade_amount: qty * price,
                 leverage: 5,
                 timestamp: new Date().toISOString(),
@@ -178,6 +180,7 @@ export class StrategyRunner {
             action: act,
             position: pos,
             symbol: this.runtime.config.symbol,
+            quantity: quantity.toString(),
             trade_amount: tradeAmount, 
             leverage: 5,
             timestamp: now.toISOString(),

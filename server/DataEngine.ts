@@ -1,7 +1,7 @@
 
 import WebSocket from 'ws';
 import { Candle, IntervalType, SymbolType } from "../types";
-import { BINANCE_WS_BASE } from "../constants";
+import { BINANCE_WS_BASE, AVAILABLE_INTERVALS } from "../constants";
 import { fetchHistoricalCandles, parseSocketMessage } from "../services/binanceService";
 import { determineBaseConfig, resampleCandles } from "../services/resampleService";
 import { FileStore } from "./FileStore";
@@ -32,6 +32,9 @@ class StreamHandler {
     // Subscribers grouped by Target Interval
     private subscribers: Map<string, Subscription[]> = new Map();
 
+    // Active Monitoring: Intervals that should be calculated even without subscribers
+    private activeTargetIntervals: Set<IntervalType> = new Set();
+
     // Keep-Alive Mechanism
     private destroyTimeout: ReturnType<typeof setTimeout> | null = null;
     private readonly KEEP_ALIVE_MS = 60000; 
@@ -54,8 +57,10 @@ class StreamHandler {
             clearTimeout(this.destroyTimeout);
             this.destroyTimeout = null;
         }
-        // If becoming active and not initialized, we should probably ensure it is connected.
-        // But usually initialize() is called right after creation.
+    }
+
+    public addActiveTargetInterval(interval: IntervalType) {
+        this.activeTargetIntervals.add(interval);
     }
 
     private getStoreKey(): string {
@@ -63,13 +68,13 @@ class StreamHandler {
     }
 
     public async initialize() {
-        console.log(`[DataEngine] Initializing Stream: ${this.symbol} @ ${this.baseInterval}`);
+        // console.log(`[DataEngine] Initializing Stream: ${this.symbol} @ ${this.baseInterval}`);
         
         // 1. Try Load from Disk
         const localData = FileStore.load<Candle[]>(this.getStoreKey()) || [];
         
         if (localData.length > 0) {
-            console.log(`[DataEngine] Loaded ${localData.length} candles from disk for ${this.symbol}`);
+            // console.log(`[DataEngine] Loaded ${localData.length} candles from disk for ${this.symbol}`);
             this.baseCandles = localData;
             
             // 2. Fetch Incremental History
@@ -79,7 +84,7 @@ class StreamHandler {
                 const newData = await fetchHistoricalCandles(this.symbol, this.baseInterval, lastTime + 1);
                 
                 if (newData.length > 0) {
-                    console.log(`[DataEngine] Fetched ${newData.length} new candles from API for ${this.symbol}`);
+                    console.log(`[DataEngine] Fetched ${newData.length} new candles from API for ${this.symbol} ${this.baseInterval}`);
                     this.baseCandles = [...this.baseCandles, ...newData];
                 }
             } catch (e) {
@@ -144,7 +149,6 @@ class StreamHandler {
     public scheduleDestroy(callback: () => void) {
         // If marked as always active (pre-warmed), do NOT destroy.
         if (this.isAlwaysActive) {
-            console.log(`[DataEngine] Stream ${this.symbol} has no subscribers but is PRE-WARMED. Keeping alive.`);
             return;
         }
 
@@ -171,6 +175,7 @@ class StreamHandler {
         this.baseCandles = [];
         this.derivedBuffers.clear();
         this.subscribers.clear();
+        this.activeTargetIntervals.clear();
     }
 
     private connect() {
@@ -180,7 +185,7 @@ class StreamHandler {
         this.ws = new WebSocket(wsUrl);
 
         this.ws.on('open', () => {
-            console.log(`[DataEngine] WS Connected: ${streamName}`);
+            // console.log(`[DataEngine] WS Connected: ${streamName}`);
             this.isConnected = true;
         });
 
@@ -229,9 +234,21 @@ class StreamHandler {
 
         this.derivedBuffers.clear();
 
+        // 1. Process Active Subscribers
         for (const [interval, subs] of this.subscribers.entries()) {
             const candles = this.getOrCalculateDerivedData(interval as IntervalType);
             subs.forEach(sub => sub.callback(candles));
+        }
+
+        // 2. Process Active Monitoring (Pre-warmed intervals without subscribers)
+        // This ensures synthesis logic runs and buffers are populated/validated.
+        if (this.isAlwaysActive) {
+            for (const interval of this.activeTargetIntervals) {
+                // If we already calculated it for subscribers, skip
+                if (!this.subscribers.has(interval)) {
+                    this.getOrCalculateDerivedData(interval);
+                }
+            }
         }
     }
 
@@ -267,24 +284,41 @@ class DataEngine {
     }
 
     /**
-     * Ensures a stream is active for background data collection.
-     * This is used for pre-warming symbols like BTC, ETH, ZEC.
+     * Ensures streams are active for ALL supported intervals for a given symbol.
+     * This iterates through AVAILABLE_INTERVALS and ensures the base stream exists
+     * and the target interval is registered for monitoring.
      */
     public async ensureActive(symbol: SymbolType) {
-         // Default base interval is 1m to support synthesizing all other cycles
-         const baseInterval = '1m'; 
-         const streamKey = `${symbol}_${baseInterval}`;
-
-         let stream = this.streams.get(streamKey);
-         if (!stream) {
-            stream = new StreamHandler(symbol, baseInterval);
-            this.streams.set(streamKey, stream);
-            await stream.initialize();
-         }
+         console.log(`[DataEngine] === Pre-warming ALL cycles for ${symbol} ===`);
          
-         // Mark as "Always Active" to prevent garbage collection
-         stream.setAlwaysActive(true);
-         console.log(`[DataEngine] Pre-warmed background stream: ${symbol}`);
+         // Iterate through all supported intervals to ensure comprehensive coverage
+         for (const interval of AVAILABLE_INTERVALS) {
+             const { baseInterval, isNative } = determineBaseConfig(interval);
+             
+             // Log the routing decision as per system requirements
+             if (isNative) {
+                console.log(`[DataEngine] Routing ${symbol} ${interval.padEnd(4)} -> Native Stream`);
+             } else {
+                console.log(`[DataEngine] Routing ${symbol} ${interval.padEnd(4)} -> Synthesizing from ${baseInterval}`);
+             }
+
+             const streamKey = `${symbol}_${baseInterval}`;
+
+             let stream = this.streams.get(streamKey);
+             if (!stream) {
+                stream = new StreamHandler(symbol, baseInterval);
+                this.streams.set(streamKey, stream);
+                // We initialize asynchronously to avoid blocking loop, but track promise if needed
+                stream.initialize().catch(e => console.error(`[DataEngine] Failed to init stream ${streamKey}`, e));
+             }
+
+             // Mark as Always Active to prevent GC
+             stream.setAlwaysActive(true);
+             
+             // Register this interval as a target for active synthesis/monitoring
+             stream.addActiveTargetInterval(interval);
+         }
+         console.log(`[DataEngine] === Completed setup for ${symbol} ===\n`);
     }
 
     public async subscribe(

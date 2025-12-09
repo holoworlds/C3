@@ -1,4 +1,5 @@
 
+
 import express from 'express';
 import http from 'http';
 import { Server } from 'socket.io';
@@ -67,8 +68,9 @@ async function initializeSystem() {
         
         for (const snapshot of savedSnapshots) {
             try {
-                // MIGRATION: Merge saved config with DEFAULT_CONFIG to ensure new fields (like takeoverDirection) exist
-                // This fixes the "Crash on missing field" issue
+                // MIGRATION / SAFETY: Merge saved config with DEFAULT_CONFIG.
+                // This ensures new fields like 'takeoverDirection' are populated with defaults 
+                // if they are missing from the saved file.
                 const sanitizedConfig = { ...DEFAULT_CONFIG, ...snapshot.config };
 
                 // Re-create Runner
