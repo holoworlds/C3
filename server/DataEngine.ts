@@ -56,7 +56,7 @@ class StreamHandler {
         console.log(`[DataEngine] Initializing Stream: ${this.symbol} @ ${this.baseInterval}`);
         
         // 1. Try Load from Disk
-        const localData = FileStore.load(this.getStoreKey());
+        const localData = FileStore.load<Candle[]>(this.getStoreKey()) || [];
         
         if (localData.length > 0) {
             console.log(`[DataEngine] Loaded ${localData.length} candles from disk for ${this.symbol}`);

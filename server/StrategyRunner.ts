@@ -89,6 +89,20 @@ export class StrategyRunner {
         }
     }
 
+    public getSnapshot() {
+        return {
+            config: this.runtime.config,
+            positionState: this.runtime.positionState,
+            tradeStats: this.runtime.tradeStats
+        };
+    }
+
+    public restoreState(position: PositionState, stats: TradeStats) {
+        this.runtime.positionState = position;
+        this.runtime.tradeStats = stats;
+        console.log(`[${this.runtime.config.name}] State Restored: ${position.direction}, Today's Trades: ${stats.dailyTradeCount}`);
+    }
+
     private initializeManualPosition(config: StrategyConfig) {
         if (config.takeoverDirection === 'FLAT') {
             this.runtime.positionState = INITIAL_POS_STATE;

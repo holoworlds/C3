@@ -6,6 +6,7 @@ import cors from 'cors';
 import { StrategyRunner } from './StrategyRunner';
 import { DEFAULT_CONFIG } from '../constants';
 import { StrategyConfig, StrategyRuntime } from '../types';
+import { FileStore } from './FileStore';
 
 const app = express();
 app.use(cors());
@@ -25,19 +26,70 @@ const PORT = 3001;
 const strategies: Record<string, StrategyRunner> = {};
 let logs: any[] = [];
 
-// Initialize Default Strategy
-const defaultRunner = new StrategyRunner(
-    DEFAULT_CONFIG, 
-    (id, runtime) => broadcastUpdate(id, runtime),
-    (log) => addLog(log)
-);
-strategies[DEFAULT_CONFIG.id] = defaultRunner;
-defaultRunner.start(); // Auto-start the default strategy
+// --- Persistence Helpers ---
+function saveSystemState() {
+    const strategySnapshots = Object.values(strategies).map(s => s.getSnapshot());
+    FileStore.save('strategies', strategySnapshots);
+    FileStore.save('logs', logs);
+}
+
+// --- Initialization with Recovery ---
+async function initializeSystem() {
+    console.log('[System] Initializing...');
+
+    // 1. Restore Logs
+    const savedLogs = FileStore.load<any[]>('logs');
+    if (savedLogs && Array.isArray(savedLogs)) {
+        logs = savedLogs;
+        console.log(`[System] Restored ${logs.length} historical logs.`);
+    }
+
+    // 2. Restore Strategies
+    const savedSnapshots = FileStore.load<any[]>('strategies');
+    if (savedSnapshots && Array.isArray(savedSnapshots) && savedSnapshots.length > 0) {
+        console.log(`[System] Restoring ${savedSnapshots.length} strategies from disk...`);
+        
+        for (const snapshot of savedSnapshots) {
+            // Re-create Runner
+            const runner = new StrategyRunner(
+                snapshot.config,
+                (id, runtime) => {
+                    broadcastUpdate(id, runtime);
+                    // Debounced save could be better, but for now simple check or periodic
+                },
+                (log) => {
+                    addLog(log);
+                    saveSystemState(); // Save on new log
+                }
+            );
+
+            // Restore Internal State
+            if (snapshot.positionState && snapshot.tradeStats) {
+                runner.restoreState(snapshot.positionState, snapshot.tradeStats);
+            }
+
+            strategies[snapshot.config.id] = runner;
+            await runner.start();
+        }
+    } else {
+        console.log('[System] No saved state found. Starting default strategy.');
+        // Default Start
+        const defaultRunner = new StrategyRunner(
+            DEFAULT_CONFIG, 
+            (id, runtime) => broadcastUpdate(id, runtime),
+            (log) => {
+                addLog(log);
+                saveSystemState();
+            }
+        );
+        strategies[DEFAULT_CONFIG.id] = defaultRunner;
+        defaultRunner.start();
+    }
+}
 
 // --- Helper Functions ---
 
 function broadcastUpdate(id: string, runtime: StrategyRuntime) {
-    // Optimization: Broadcast state update to all clients
     io.emit('state_update', { id, runtime });
 }
 
@@ -74,6 +126,7 @@ io.on('connection', (socket) => {
         if (runner) {
             const newConfig = { ...runner.runtime.config, ...updates };
             runner.updateConfig(newConfig);
+            saveSystemState(); // Save on config change
             console.log(`Updated config for ${id}`);
         }
     });
@@ -86,10 +139,14 @@ io.on('connection', (socket) => {
         const newRunner = new StrategyRunner(
             newConfig,
             (id, runtime) => broadcastUpdate(id, runtime),
-            (log) => addLog(log)
+            (log) => {
+                addLog(log);
+                saveSystemState();
+            }
         );
         strategies[newId] = newRunner;
         newRunner.start();
+        saveSystemState(); // Save on creation
         
         broadcastFullState();
     });
@@ -99,6 +156,7 @@ io.on('connection', (socket) => {
         if (strategies[id]) {
             strategies[id].stop();
             delete strategies[id];
+            saveSystemState(); // Save on deletion
             broadcastFullState();
         }
     });
@@ -107,10 +165,19 @@ io.on('connection', (socket) => {
     socket.on('cmd_manual_order', ({ id, type }: { id: string, type: 'LONG'|'SHORT'|'FLAT' }) => {
         if (strategies[id]) {
             strategies[id].handleManualOrder(type);
+            saveSystemState(); // Save on manual order
         }
     });
 });
 
-server.listen(PORT, () => {
-    console.log(`Backend Strategy Server running on port ${PORT}`);
+// Periodic Save (Safety Net)
+setInterval(() => {
+    saveSystemState();
+}, 5000); // Save every 5 seconds
+
+// Start Server
+initializeSystem().then(() => {
+    server.listen(PORT, () => {
+        console.log(`Backend Strategy Server running on port ${PORT}`);
+    });
 });
