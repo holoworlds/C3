@@ -96,8 +96,14 @@ export class StrategyRunner {
     public updateConfig(newConfig: StrategyConfig) {
         const oldSymbol = this.runtime.config.symbol;
         const oldInterval = this.runtime.config.interval;
+        const wasManual = this.runtime.config.manualTakeover;
         
         this.runtime.config = newConfig;
+
+        // CHECK MANUAL TAKEOVER TRANSITION (False -> True)
+        if (!wasManual && newConfig.manualTakeover) {
+             this.initializeManualPosition(newConfig);
+        }
 
         // If symbol or interval changed, restart connection and data
         if (newConfig.symbol !== oldSymbol || newConfig.interval !== oldInterval) {
@@ -107,6 +113,46 @@ export class StrategyRunner {
         } else {
             // Just trigger an update to ensure UI sees new config
             this.emitUpdate();
+        }
+    }
+
+    private initializeManualPosition(config: StrategyConfig) {
+        if (config.takeoverDirection === 'FLAT') {
+            this.runtime.positionState = INITIAL_POS_STATE;
+            console.log(`[${config.name}] Manual Takeover: Reset to FLAT`);
+        } else {
+            const price = this.runtime.lastPrice; // Ideally we use price at timestamp, but for now use current
+            const qty = config.takeoverQuantity;
+            
+            this.runtime.positionState = {
+                direction: config.takeoverDirection,
+                initialQuantity: qty,
+                remainingQuantity: qty,
+                entryPrice: price,
+                highestPrice: config.takeoverDirection === 'LONG' ? price : 0,
+                lowestPrice: config.takeoverDirection === 'SHORT' ? price : 0,
+                openTime: Date.now(), // Should parse config.takeoverTimestamp if strict
+                tpLevelsHit: [],
+                slLevelsHit: []
+            };
+
+            // Log this forced takeover
+            const payload: WebhookPayload = {
+                secret: config.secret,
+                action: config.takeoverDirection === 'LONG' ? 'buy' : 'sell',
+                position: config.takeoverDirection.toLowerCase(),
+                symbol: config.symbol,
+                trade_amount: qty * price,
+                leverage: 5,
+                timestamp: new Date().toISOString(),
+                tv_exchange: "BINANCE",
+                strategy_name: config.name,
+                tp_level: "Manual_Takeover_Init",
+                execution_price: price,
+                execution_quantity: qty
+            };
+            this.sendWebhook(payload, true);
+            console.log(`[${config.name}] Manual Takeover: Initialized ${config.takeoverDirection} ${qty}`);
         }
     }
 

@@ -67,6 +67,9 @@ export interface StrategyConfig {
 
   // Manual Control
   manualTakeover: boolean; // If true, auto signals are blocked
+  takeoverDirection: 'LONG' | 'SHORT' | 'FLAT'; // Configured direction
+  takeoverQuantity: number;
+  takeoverTimestamp: string; // YYYY-MM-DD HH:mm:ss
 
   // Trend Filter
   trendFilterBlockShort: boolean; // 7 > 25 > 99 时不开空

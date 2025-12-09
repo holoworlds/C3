@@ -165,12 +165,10 @@ const App: React.FC = () => {
 
   const activeStrategyLogs = logs.filter(l => l.strategyId === activeStrategyId);
 
-  // REMOVED BLOCKING LOADING SCREEN
-  // Now we just show the UI with "Disconnected" status if offline.
-
   return (
     <div className="flex h-screen w-full bg-slate-50 text-slate-900 overflow-hidden font-sans">
-      <div className="w-80 flex-shrink-0 p-2 border-r border-slate-200">
+      {/* Width increased to 340px (w-96 is 384px, or custom) to fit new layout better */}
+      <div className="w-[360px] flex-shrink-0 p-2 border-r border-slate-200">
         <ControlPanel 
            activeConfig={activeStrategy.config} 
            updateConfig={updateStrategyConfig}

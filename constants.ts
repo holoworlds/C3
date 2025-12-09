@@ -8,8 +8,8 @@ export const AVAILABLE_SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'X
 // and might result in no data unless the API supports them or resampling is implemented.
 export const AVAILABLE_INTERVALS = [
   '1m', '2m', '3m', '5m', '6m', '10m', '15m', '20m', '30m', '31m', '45m', 
-  '1h', '2h', '3h', '4h', '6h', '10h', '12h', 
-  '1d', '2d', '3d', '1w', '1M'
+  '1h', '2h', '3h', '4h', '6h', '10h', '12h' 
+  , '1d', '2d', '3d', '1w', '1M'
 ] as const; 
 
 // Binance Futures (USDT-M) API Endpoints
@@ -30,6 +30,9 @@ export const DEFAULT_CONFIG: StrategyConfig = {
   triggerOnClose: false, // Default to Intraday triggering
 
   manualTakeover: false,
+  takeoverDirection: 'FLAT',
+  takeoverQuantity: 1.0,
+  takeoverTimestamp: '',
 
   trendFilterBlockShort: false,
   trendFilterBlockLong: false,

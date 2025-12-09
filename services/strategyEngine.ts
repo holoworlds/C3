@@ -26,10 +26,8 @@ export const evaluateStrategy = (
     return { newPositionState: nextPos, newTradeStats: nextStats, actions };
   }
 
-  // 2. Manual Takeover Check
-  if (config.manualTakeover) {
-    return { newPositionState: nextPos, newTradeStats: nextStats, actions };
-  }
+  // NOTE: We do NOT return early for manualTakeover anymore. 
+  // We handle it by blocking ENTRY logic blocks but allowing EXIT logic blocks.
 
   const last = candles[candles.length - 1];
   const prev = candles[candles.length - 2];
@@ -90,8 +88,9 @@ export const evaluateStrategy = (
 
   // --- 4. Determine Entry Conditions (Specific Reasons) ---
   
+  // ENTRY Logic: Blocked if manualTakeover is TRUE
   let longEntryReason = '';
-  if (isSignalTrigger && !blockLong) { 
+  if (!config.manualTakeover && isSignalTrigger && !blockLong) { 
      if (config.useEMA7_25 && config.ema7_25_Long && ema7_25_Up) longEntryReason = 'EMA7上穿25开多';
      else if (config.useEMA7_99 && config.ema7_99_Long && ema7_99_Up) longEntryReason = 'EMA7上穿99开多';
      else if (config.useEMA25_99 && config.ema25_99_Long && ema25_99_Up) longEntryReason = 'EMA25上穿99开多';
@@ -100,7 +99,7 @@ export const evaluateStrategy = (
   }
 
   let shortEntryReason = '';
-  if (isSignalTrigger && !blockShort) { 
+  if (!config.manualTakeover && isSignalTrigger && !blockShort) { 
     if (config.useEMA7_25 && config.ema7_25_Short && ema7_25_Down) shortEntryReason = 'EMA7下穿25开空';
     else if (config.useEMA7_99 && config.ema7_99_Short && ema7_99_Down) shortEntryReason = 'EMA7下穿99开空';
     else if (config.useEMA25_99 && config.ema25_99_Short && ema25_99_Down) shortEntryReason = 'EMA25下穿99开空';
@@ -156,9 +155,9 @@ export const evaluateStrategy = (
       const isLong = nextPos.direction === 'LONG';
       const entryPrice = nextPos.entryPrice;
       const currentPrice = last.close;
-      const profitPct = isLong 
-        ? (currentPrice - entryPrice) / entryPrice * 100 
-        : (entryPrice - currentPrice) / entryPrice * 100;
+      // const profitPct = isLong 
+      //   ? (currentPrice - entryPrice) / entryPrice * 100 
+      //   : (entryPrice - currentPrice) / entryPrice * 100;
 
       let finalCloseReason = '';
       
@@ -283,11 +282,11 @@ export const evaluateStrategy = (
           };
           nextStats.dailyTradeCount++;
           
-          // REVERSE LOGIC
+          // REVERSE LOGIC - Only if Manual Takeover is NOT active
           const isSignalExit = (isLong && finalCloseReason === exitLongReason) || 
                                (!isLong && finalCloseReason === exitShortReason);
 
-          if (config.useReverse && isSignalExit) {
+          if (config.useReverse && isSignalExit && !config.manualTakeover) {
              const newQty = config.tradeAmount / last.close;
              const tradeVal = config.tradeAmount;
 
@@ -323,8 +322,8 @@ export const evaluateStrategy = (
       }
   }
 
-  // B. Check Entries (Only if FLAT)
-  if (nextPos.direction === 'FLAT' && canOpen) {
+  // B. Check Entries (Only if FLAT and Manual Takeover is FALSE)
+  if (nextPos.direction === 'FLAT' && canOpen && !config.manualTakeover) {
       if (longEntryReason || shortEntryReason) {
           const qty = config.tradeAmount / last.close;
           const tradeVal = config.tradeAmount;
