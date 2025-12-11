@@ -1,4 +1,5 @@
 
+
 import WebSocket from 'ws';
 import { Candle, IntervalType, SymbolType } from "../types";
 import { BINANCE_WS_BASE, AVAILABLE_INTERVALS } from "../constants";
@@ -77,20 +78,50 @@ class StreamHandler {
         if (localData.length > 0) {
             // Sort to be safe
             localData.sort((a, b) => a.time - b.time);
-            this.baseCandles = localData;
             
-            // 2. Fetch Incremental History
-            const lastTime = localData[localData.length - 1].time;
-            try {
-                // Fetch new data since last save
-                const newData = await fetchHistoricalCandles(this.symbol, this.baseInterval, lastTime + 1);
-                if (newData.length > 0) {
-                    console.log(`[DataEngine] Fetched ${newData.length} new candles for ${this.symbol} ${this.baseInterval}`);
-                    this.baseCandles = [...this.baseCandles, ...newData];
-                }
-            } catch (e) {
-                console.error("[DataEngine] Failed incremental fetch", e);
+            // Validate data integrity (simple check)
+            if (localData.length > this.MAX_CANDLES) {
+                localData = localData.slice(-this.MAX_CANDLES);
             }
+            this.baseCandles = localData;
+
+            // 2. Fetch Incremental History (Gap Filling)
+            // ENHANCED: Loop to fetch ALL missing data, even if gap > 1500 candles (server down for days)
+            let lastTime = localData[localData.length - 1].time;
+            const now = Date.now();
+            
+            console.log(`[DataEngine] Resuming ${this.symbol} ${this.baseInterval}. Last candle: ${new Date(lastTime).toLocaleString()}`);
+
+            while (true) {
+                // Buffer to avoid requesting "future" data too aggressively
+                if (now - lastTime < 60000 && this.baseInterval === '1m') break; 
+
+                try {
+                    // Fetch starting from next ms
+                    const batch = await fetchHistoricalCandles(this.symbol, this.baseInterval, lastTime + 1);
+                    
+                    if (!batch || batch.length === 0) {
+                        break; // No more data available
+                    }
+
+                    // Append unique candles
+                    const newCandles = batch.filter(c => c.time > lastTime);
+                    if (newCandles.length === 0) break;
+
+                    console.log(`[DataEngine] ...Fetched gap batch: ${newCandles.length} candles`);
+                    this.baseCandles = [...this.baseCandles, ...newCandles];
+                    
+                    lastTime = this.baseCandles[this.baseCandles.length - 1].time;
+
+                    // If batch was small, we probably reached the tip
+                    if (batch.length < 500) break;
+
+                } catch (e) {
+                    console.error(`[DataEngine] Error filling gap for ${this.symbol}:`, e);
+                    break;
+                }
+            }
+
         } else {
             // 3. Deep Fetch (Multi-Page) for Fresh Start
             // We need enough data for derived intervals. 
@@ -101,8 +132,8 @@ class StreamHandler {
             let allFetched: Candle[] = [];
             let endTime: number | undefined = undefined; // Start with 'now'
 
-            // Fetch up to 3 pages (3 * 1500 = 4500 candles)
-            for (let i = 0; i < 3; i++) {
+            // Fetch up to 4 pages (4 * 1500 = 6000 candles) to ensure coverage
+            for (let i = 0; i < 4; i++) {
                 try {
                     const batch = await fetchHistoricalCandles(this.symbol, this.baseInterval, undefined, endTime);
                     if (batch.length === 0) break;
@@ -219,7 +250,7 @@ class StreamHandler {
         this.ws = new WebSocket(wsUrl);
 
         this.ws.on('open', () => {
-            // console.log(`[DataEngine] WS Connected: ${streamName}`);
+            console.log(`[DataEngine] WS Connected: ${streamName}`);
             this.isConnected = true;
         });
 
