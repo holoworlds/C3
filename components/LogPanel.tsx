@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { AlertLog } from '../types';
 
@@ -13,8 +14,8 @@ const LogPanel: React.FC<LogPanelProps> = ({ logs, strategies }) => {
      if (action === 'buy' && position === 'long') return '开多 (Open Long)';
      if (action === 'sell' && position === 'short') return '开空 (Open Short)';
      if (action === 'sell' && position === 'flat') return '平多 (Close Long)';
-     if (action === 'buy_to_cover' && position === 'flat') return '平空 (Close Short)';
-     if (action === 'buy_to_cover') return '平空 (Close Short)'; // Fallback
+     if (action === 'buy' && position === 'flat') return '平空 (Close Short)';
+     if (action === 'buy_to_cover') return '平空 (Close Short)'; // Legacy support
      if (action === 'sell') return '卖出 (Sell)'; // Fallback
      return `${action} ${position}`;
   }

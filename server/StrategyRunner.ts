@@ -1,4 +1,5 @@
 
+
 import { StrategyConfig, StrategyRuntime, Candle, PositionState, TradeStats, WebhookPayload } from "../types";
 import { enrichCandlesWithIndicators } from "../services/indicatorService";
 import { evaluateStrategy } from "../services/strategyEngine";
@@ -143,6 +144,7 @@ export class StrategyRunner {
 
             const payload: WebhookPayload = {
                 secret: config.secret || '',
+                // Init Open Long = Buy, Init Open Short = Sell
                 action: direction === 'LONG' ? 'buy' : 'sell',
                 // SAFETY: Use optional chaining to prevent crash
                 position: direction?.toLowerCase() || 'flat',
@@ -185,7 +187,8 @@ export class StrategyRunner {
             quantity = tradeAmount / price;
         }
         if (type === 'FLAT') { 
-            act = this.runtime.positionState.direction === 'LONG' ? 'sell' : 'buy_to_cover'; 
+            // FIX: If Long, Sell to close. If Short, Buy to close.
+            act = this.runtime.positionState.direction === 'LONG' ? 'sell' : 'buy'; 
             pos = 'flat'; 
             quantity = this.runtime.positionState.remainingQuantity; 
             tradeAmount = quantity * price; 

@@ -215,7 +215,8 @@ export const evaluateStrategy = (
                   const actualQty = Math.min(qtyToSell, nextPos.remainingQuantity);
                   const tradeValue = actualQty * currentPrice;
 
-                  const action = isLong ? 'sell' : 'buy_to_cover'; 
+                  // FIX: Closing Short = BUY, Closing Long = SELL
+                  const action = isLong ? 'sell' : 'buy'; 
                   actions.push(createPayload(action, nextPos.direction.toLowerCase(), `止盈${idx+1}触发`, tradeValue, actualQty));
                   
                   // Update State
@@ -241,7 +242,8 @@ export const evaluateStrategy = (
                   const actualQty = Math.min(qtyToSell, nextPos.remainingQuantity);
                   const tradeValue = actualQty * currentPrice;
 
-                  const action = isLong ? 'sell' : 'buy_to_cover';
+                  // FIX: Closing Short = BUY, Closing Long = SELL
+                  const action = isLong ? 'sell' : 'buy';
                   actions.push(createPayload(action, nextPos.direction.toLowerCase(), `止损${idx+1}触发`, tradeValue, actualQty));
 
                   nextPos.remainingQuantity = Math.max(0, nextPos.remainingQuantity - actualQty);
@@ -264,7 +266,9 @@ export const evaluateStrategy = (
           if (nextPos.remainingQuantity > 0.000001) {
              const qtyToClose = nextPos.remainingQuantity;
              const tradeValue = qtyToClose * currentPrice;
-             const actionStr = isLong ? 'sell' : 'buy_to_cover';
+             
+             // VERIFIED: Close Long -> SELL. Close Short -> BUY.
+             const actionStr = isLong ? 'sell' : 'buy';
              
              actions.push(createPayload(actionStr, 'flat', finalCloseReason, tradeValue, qtyToClose));
           }
@@ -291,6 +295,7 @@ export const evaluateStrategy = (
              const tradeVal = config.tradeAmount;
 
              if (isLong && config.reverseLongToShort && canOpen) {
+                // Open Short (from Flat) -> Sell
                 actions.push(createPayload('sell', 'short', '反手开空', tradeVal, newQty));
                 nextPos = {
                   direction: 'SHORT',
@@ -304,6 +309,7 @@ export const evaluateStrategy = (
                   slLevelsHit: []
                 };
              } else if (!isLong && config.reverseShortToLong && canOpen) {
+                // Open Long (from Flat) -> Buy
                 actions.push(createPayload('buy', 'long', '反手开多', tradeVal, newQty));
                 nextPos = {
                   direction: 'LONG',
